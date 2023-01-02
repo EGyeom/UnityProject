@@ -3,104 +3,34 @@ using System.Collections.Generic;
 using UnityEngine;
 using static Define;
 
-public class PlayerController : MonoBehaviour
+public class PlayerController : CreatureController
 {
-    public float _speed = 5.0f;
-
-    MoveDir _dir = MoveDir.Down;
-
-    public MoveDir Dir
+    Coroutine _coSkill;
+    bool _isRanged = false;
+    protected override void init()
     {
-        get { return _dir; }
-        set {
-            if (_dir == value)
-                return;
-            switch (value)
-            {
-                case MoveDir.Up:
-                    _animator.Play("WALK_BACK");
-                    transform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
-                    break;
-                case MoveDir.Down:
-                    _animator.Play("WALK_FRONT");
-                    transform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
-                    break;
-                case MoveDir.Left:
-                    _animator.Play("WALK_SIDE");
-                    transform.localScale = new Vector3(-1.0f, 1.0f, 1.0f);
-                    break;
-                case MoveDir.Right:
-                    _animator.Play("WALK_SIDE");
-                    transform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
-                    break;
-                case MoveDir.None:
-                    if(_dir == MoveDir.Up)
-                    {
-                        _animator.Play("IDLE_BACK");
-                        transform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
-                    }
-                    else if(_dir == MoveDir.Down)
-                    {
-                        _animator.Play("IDLE_FRONT");
-                        transform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
-                    }
-                    else if(_dir == MoveDir.Left)
-                    {
-                        _animator.Play("IDLE_SIDE");
-                        transform.localScale = new Vector3(-1.0f, 1.0f, 1.0f);
-                    }
-                    else
-                    {
-                        _animator.Play("IDLE_SIDE");
-                        transform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
-                    }
-                    break;
-            }
-            _dir = value;
-        }
-    }
-    bool _isMoving = false;
-    Animator _animator;
-    public Grid _grid;
-    Vector3Int _cellPos = Vector3Int.zero;
-
-    // Start is called before the first frame update
-    void Start()
-    {
-        _animator = GetComponent<Animator>();
-        Vector3 pos = _grid.CellToWorld(_cellPos) + new Vector3(0.5f, 0.5f);
-        transform.position = pos;
+        base.init();
     }
 
-    // Update is called once per frame
-    void Update()
+    protected override void updateController()
     {
-        GetDirInput();
-        UpdateIsMoving();
-        UpdatePosition();
-    }
-
-    void UpdatePosition()
-    {
-        if (_isMoving == false)
-            return;
-        Vector3 destPos = _grid.CellToWorld(_cellPos) + new Vector3(0.5f, 0.5f);
-        Vector3 moveDir = destPos - transform.position;
-
-        // 도착 여부 체크
-        float dist = moveDir.magnitude;
-        if (dist < _speed * Time.deltaTime)
+        switch (State)
         {
-            transform.position = destPos;
-            _isMoving = false;
+            case CreatureState.Idle:
+                GetDirInput();
+                break;
+            case CreatureState.Moving:
+                GetDirInput();
+                break;
         }
-        else
-        {
-            transform.position += moveDir.normalized * _speed * Time.deltaTime;
-            _isMoving = true;
-        }
-
+        base.updateController();
     }
+
+    private void LateUpdate()
+    {
+        Camera.main.transform.position = new Vector3(transform.position.x, transform.position.y, -10);
+    }
+
     void GetDirInput()
     {
         if (Input.GetKey(KeyCode.W))
@@ -129,29 +59,125 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    void UpdateIsMoving()
+    protected override void UpdateIdle()
     {
-        if (_isMoving == false)
+        if(Dir != MoveDir.None)
+        {
+            State = CreatureState.Moving;
+            return;
+        }
+
+        if (Input.GetKey(KeyCode.Space))
+        {
+            State = CreatureState.Skill;
+            //_coSkill = StartCoroutine("CoStartPunch");
+            _coSkill = StartCoroutine("CoStartShootArrow");
+        }
+    }
+
+    IEnumerator CoStartPunch()
+    {
+        //피격 판정
+        GameObject obj = Managers.Object.Find(GetFrontCellPos());
+        if (obj != null)
+        {
+            CreatureController cc = obj.GetComponent<CreatureController>();
+            if (cc != null)
+                cc.onDamaged();
+        }
+            
+        //딜레이
+        yield return new WaitForSeconds(0.5f);
+        State = CreatureState.Idle;
+        _coSkill = null;
+        _isRanged = false;
+    }
+
+    IEnumerator CoStartShootArrow()
+    {
+        GameObject go = Managers.Resource.Instantiate("Creature/Arrow");
+        ArrowController ac = go.GetComponent<ArrowController>();
+        ac.Dir = _lastDir;
+        ac.CellPos = CellPos;
+
+        yield return new WaitForSeconds(0.3f);
+        State = CreatureState.Idle;
+        _coSkill = null;
+        _isRanged = true;
+    }
+
+    protected override void UpdateAnimation()
+    {
+        if (State == CreatureState.Idle)
+        {
+            if (_lastDir == MoveDir.Up)
+            {
+                _animator.Play("IDLE_BACK");
+                _sprite.flipX = false;
+            }
+            else if (_lastDir == MoveDir.Down)
+            {
+                _animator.Play("IDLE_FRONT");
+                _sprite.flipX = false;
+            }
+            else if (_lastDir == MoveDir.Left)
+            {
+                _animator.Play("IDLE_SIDE");
+                _sprite.flipX = true;
+            }
+            else
+            {
+                _animator.Play("IDLE_SIDE");
+                _sprite.flipX = false;
+            }
+        }
+        else if (State == CreatureState.Moving)
         {
             switch (Dir)
             {
                 case MoveDir.Up:
-                    _cellPos += Vector3Int.up;
-                    _isMoving = true;
+                    _animator.Play("WALK_BACK");
+                    _sprite.flipX = false;
                     break;
                 case MoveDir.Down:
-                    _cellPos += Vector3Int.down;
-                    _isMoving = true;
+                    _animator.Play("WALK_FRONT");
+                    _sprite.flipX = false;
                     break;
                 case MoveDir.Left:
-                    _cellPos += Vector3Int.left;
-                    _isMoving = true;
+                    _animator.Play("WALK_SIDE");
+                    _sprite.flipX = true;
                     break;
                 case MoveDir.Right:
-                    _cellPos += Vector3Int.right;
-                    _isMoving = true;
+                    _animator.Play("WALK_SIDE");
+                    _sprite.flipX = false;
                     break;
             }
+        }
+        else if (State == CreatureState.Skill)
+        {
+            switch (_lastDir)
+            {
+                case MoveDir.Up:
+                    _animator.Play(_isRanged ? "ATTACK_WEAPON_BACK"  : "ATTACK_BACK");
+                    _sprite.flipX = false;
+                    break;
+                case MoveDir.Down:
+                    _animator.Play(_isRanged ? "ATTACK_WEAPON_FRONT" : "ATTACK_FRONT");
+                    _sprite.flipX = false;
+                    break;
+                case MoveDir.Left:
+                    _animator.Play(_isRanged ? "ATTACK_WEAPON_SIDE" : "ATTACK_SIDE");
+                    _sprite.flipX = true;
+                    break;
+                case MoveDir.Right:
+                    _animator.Play(_isRanged ? "ATTACK_WEAPON_SIDE" : "ATTACK_SIDE");
+                    _sprite.flipX = false;
+                    break;
+            }
+        }
+        else
+        {
+
         }
     }
 }
