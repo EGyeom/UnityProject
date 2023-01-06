@@ -9,6 +9,7 @@ public class CreatureController : MonoBehaviour
 
     //protected bool _isMoving = false;
     protected Animator _animator;
+    [SerializeField]
     public Vector3Int CellPos { get; set; } = Vector3Int.zero;
     protected MoveDir _dir = MoveDir.Down;
     protected MoveDir _lastDir = MoveDir.Down;
@@ -38,6 +39,18 @@ public class CreatureController : MonoBehaviour
         }
     }
 
+    public MoveDir GetDirFromVec(Vector3Int dir)
+    {
+        if (dir.x > 0)
+             return MoveDir.Right;
+        else if (dir.x < 0)
+             return MoveDir.Left;
+        else if (dir.y < 0)
+             return MoveDir.Down;
+        else if (dir.y > 0)
+             return MoveDir.Up;
+        else return MoveDir.None;
+    }
     public Vector3Int GetFrontCellPos()
     {
         Vector3Int cellPos = CellPos;
@@ -161,7 +174,7 @@ public class CreatureController : MonoBehaviour
                 UpdateIdle();
                 break;
             case CreatureState.Moving:
-                UpdatMoving();
+                UpdateMoving();
                 break;
             case CreatureState.Skill:
                 UpdateSkill();
@@ -172,7 +185,7 @@ public class CreatureController : MonoBehaviour
         }
     }
 
-    protected virtual void UpdatMoving()
+    protected virtual void UpdateMoving()
     {
         Vector3 destPos = Managers.Map.CurrentGrid.CellToWorld(CellPos) + new Vector3(0.5f, 0.5f);
         Vector3 moveDir = destPos - transform.position;
